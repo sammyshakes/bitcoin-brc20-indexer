@@ -174,6 +174,18 @@ impl Brc20Transfer {
             info!("VALID: Transfer inscription from: {:?}", self.from);
             self.is_valid = true;
 
+            if self.tx.txid.to_string()
+                == "3b60ff6d03f3a0656072f1ebaab6b13dddb60bd60c302ff3a53a90da1bf93ce4"
+                || self.tx.txid.to_string()
+                    == "e5ee3632578f040f2e9116a1483cd5fc550c8112e931896ec9bee1790c7633d1"
+                || self.tx.txid.to_string()
+                    == "c12c7073a1687e861bd064e0c39078646229515142edcacbbf19bef76dfac95e"
+                || self.tx.txid.to_string()
+                    == "4f8b7b7600a71d54e6881e61c2d28cb928928393859cbdee81fce7e634c386ef"
+            {
+                error!("MADE IT HERE 2 VALID txid: {}", self.tx.txid.to_string());
+            };
+
             // Insert user balance entry
             user_balance_entry = mongo_client
                 .insert_user_balance_entry(
@@ -243,6 +255,16 @@ pub async fn handle_transfer_operation(
     user_balances_to_insert: &mut HashMap<(String, String), Document>,
     invalid_brc20_docs: &mut Vec<Document>,
 ) -> Result<(Brc20Transfer, UserBalanceEntry), Box<dyn std::error::Error>> {
+    if raw_tx.txid.to_string() == "3b60ff6d03f3a0656072f1ebaab6b13dddb60bd60c302ff3a53a90da1bf93ce4"
+        || raw_tx.txid.to_string()
+            == "e5ee3632578f040f2e9116a1483cd5fc550c8112e931896ec9bee1790c7633d1"
+        || raw_tx.txid.to_string()
+            == "c12c7073a1687e861bd064e0c39078646229515142edcacbbf19bef76dfac95e"
+        || raw_tx.txid.to_string()
+            == "4f8b7b7600a71d54e6881e61c2d28cb928928393859cbdee81fce7e634c386ef"
+    {
+        error!("MADE IT HERE 1 txid: {}", raw_tx.txid.to_string());
+    };
     // Create a new transfer transaction
     let mut validated_transfer_tx =
         Brc20Transfer::new(raw_tx, inscription, block_height, tx_height, sender);

@@ -99,6 +99,20 @@ pub async fn index_brc20(
                                 }
                             };
 
+                            //DEBUG LOGS
+                            // if txid.to_string()  == 3b60ff6d03f3a0656072f1ebaab6b13dddb60bd60c302ff3a53a90da1bf93ce4
+                            // txid.to_string()  == e5ee3632578f040f2e9116a1483cd5fc550c8112e931896ec9bee1790c7633d1 ||
+                            // txid.to_string()  == c12c7073a1687e861bd064e0c39078646229515142edcacbbf19bef76dfac95e ||
+                            // txid.to_string()  == 4f8b7b7600a71d54e6881e61c2d28cb928928393859cbdee81fce7e634c386ef
+                            if txid.to_string() == "3b60ff6d03f3a0656072f1ebaab6b13dddb60bd60c302ff3a53a90da1bf93ce4" ||
+                            txid.to_string() == "e5ee3632578f040f2e9116a1483cd5fc550c8112e931896ec9bee1790c7633d1" ||
+                            txid.to_string() == "c12c7073a1687e861bd064e0c39078646229515142edcacbbf19bef76dfac95e" ||
+                            txid.to_string() == "4f8b7b7600a71d54e6881e61c2d28cb928928393859cbdee81fce7e634c386ef" {
+                                error!("txid: {}", txid.to_string());
+                                error!("raw_tx: {:?}", raw_tx);
+                                error!("witness_data: {:?}", witness_data);
+                            };
+
                             let mut inscription_found = false;
                             for witness in witness_data {
                                 if let Some(inscription) = extract_and_process_witness_data(witness)
