@@ -234,6 +234,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         warn!("User Balances Rebuilt: {:?}", start.elapsed());
     }
 
+    start_block_height = 789982;
+
     // LFG!
     match index_brc20(&rpc, &mongo_client, start_block_height.try_into().unwrap()).await {
         Ok(_) => info!("Finished indexing BRC20 tokens"),

@@ -7,7 +7,7 @@ use super::{
 };
 use bitcoin::{Address, Network, TxIn};
 use bitcoincore_rpc::{bitcoincore_rpc_json::GetRawTransactionResult, Client, RpcApi};
-use log::{debug, error};
+use log::{debug, error, warn};
 use mongodb::bson::{Bson, Document};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -273,10 +273,21 @@ pub fn update_sender_or_inscriber_user_balance_document(
         .get_f64(consts::OVERALL_BALANCE)
         .unwrap_or_default();
 
+    //print debug logs
+    warn!("available_balance {}", available_balance);
+    warn!("transferable_balance {}", transferable_balance);
+    warn!("overall_balance {}", overall_balance);
+    warn!("user_balance_entry amount {}", user_balance_entry.amt);
+
     match user_balance_entry.entry_type {
         UserBalanceEntryType::Send => {
             let updated_transferable_balance = transferable_balance - user_balance_entry.amt;
             let updated_overall_balance = overall_balance - user_balance_entry.amt;
+            warn!(
+                "updated_transferable_balance {}",
+                updated_transferable_balance
+            );
+            warn!("updated_overall_balance {}", updated_overall_balance);
 
             user_balance.insert(
                 consts::TRANSFERABLE_BALANCE.to_string(),
@@ -286,6 +297,9 @@ pub fn update_sender_or_inscriber_user_balance_document(
                 consts::OVERALL_BALANCE.to_string(),
                 Bson::Double(updated_overall_balance),
             );
+
+            //print user balance
+            warn!("user_balance {:?}", user_balance);
         }
         UserBalanceEntryType::Inscription => {
             let updated_available_balance = available_balance - user_balance_entry.amt;
