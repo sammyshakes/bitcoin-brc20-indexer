@@ -100,8 +100,10 @@ impl Brc20Mint {
             // validate mint amount against ticker limit and max supply
             match amount {
                 Ok(amount) => {
+                    if amount < 0.0 {
+                        reason = "Mint amount less than zero".to_string();
                     // Check if the amount is greater than the limit
-                    if amount > limit {
+                    } else if amount > limit {
                         reason = "Mint amount exceeds limit".to_string();
                     // Check if total minted is already greater than or equal to max supply
                     } else if total_minted >= max_supply {

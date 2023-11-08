@@ -19,14 +19,16 @@ pub struct Brc20ActiveTransfer {
     pub tx_id: String,
     pub vout: i64,
     pub block_height: i64,
+    pub amount: f64,
 }
 
 impl Brc20ActiveTransfer {
-    pub fn new(tx_id: String, vout: i64, block_height: i64) -> Self {
+    pub fn new(tx_id: String, vout: i64, block_height: i64, amount: f64) -> Self {
         Brc20ActiveTransfer {
             tx_id,
             vout,
             block_height,
+            amount,
         }
     }
 }
@@ -158,7 +160,7 @@ impl Brc20Transfer {
         );
 
         let available_balance = mongo_client
-            .get_double(&user_balance, "available_balance")
+            .get_double(&user_balance, consts::AVAILABLE_BALANCE)
             .unwrap_or_default();
 
         // Get transfer amount
@@ -170,8 +172,8 @@ impl Brc20Transfer {
             .unwrap_or(0.0);
 
         // Check if the user has enough balance to transfer
-        if available_balance >= transfer_amount {
-            info!("VALID: Transfer inscription from: {:?}", self.from);
+        if transfer_amount > 0.0 && available_balance >= transfer_amount {
+            info!("VALID:Tx {:?} Transfer inscription from: {:?}", self.tx.txid.to_string() , self.from);
             self.is_valid = true;
 
             // Insert user balance entry
@@ -190,7 +192,7 @@ impl Brc20Transfer {
 
             // Create a new active transfer when the inscription is valid
             let active_transfer =
-                Brc20ActiveTransfer::new(self.tx.txid.to_string(), 0, self.block_height.into());
+                Brc20ActiveTransfer::new(self.tx.txid.to_string(), 0, self.block_height.into(), transfer_amount);
 
             // If active_transfers is None, create a new HashMap and assign it to active_transfers
             if active_transfers.is_none() {
@@ -283,9 +285,10 @@ impl ToDocument for Brc20Transfer {
 impl ToDocument for Brc20ActiveTransfer {
     fn to_document(&self) -> Document {
         doc! {
-            "txid": self.tx_id.to_string(),
+            "tx_id": &self.tx_id,
             "vout": self.vout,
             "block_height": self.block_height,
+            "amount": self.amount,
             "created_at": Bson::DateTime(DateTime::now())
         }
     }
@@ -306,10 +309,15 @@ impl Brc20ActiveTransfer {
             .get_i64("block_height")
             .map_err(|_| "Invalid block_height".to_string())?;
 
+        let amount = document
+            .get_f64("amount")
+            .map_err(|_| "Invalid amount".to_string())?;
+
         Ok(Self {
             tx_id,
             vout,
             block_height,
+            amount,
         })
     }
 }
