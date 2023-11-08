@@ -465,8 +465,8 @@ pub async fn check_for_transfer_send(
         // Check if transfer exists in the transfer_documents vector in memory
         let index = transfer_documents.iter().position(|doc| {
             if let Ok(tx) = doc.get_document("tx") {
-                if let Ok(txid) = tx.get_str("txid") {
-                    return txid == txid;
+                if let Ok(txid2) = tx.get_str("txid") {
+                    return txid2 == txid;
                 }
             }
             false
