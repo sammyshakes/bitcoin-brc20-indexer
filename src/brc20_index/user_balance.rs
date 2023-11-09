@@ -1,5 +1,5 @@
 use super::ToDocument;
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{doc, Bson, Document};
 use serde::Serialize;
 use std::fmt;
 
@@ -18,9 +18,9 @@ impl ToDocument for UserBalance {
         doc! {
             "address": self.address.to_string(),
             "tick": self.tick.to_lowercase().clone(),
-            "overall_balance": self.overall_balance,
-            "available_balance": self.available_balance,
-            "transferable_balance": self.transferable_balance,
+            "overall_balance": Bson::Double(self.overall_balance),
+            "available_balance": Bson::Double(self.available_balance),
+            "transferable_balance": Bson::Double(self.transferable_balance),
             "block_height": self.block_height as i64,
         }
     }
@@ -72,7 +72,7 @@ impl ToDocument for UserBalanceEntry {
             "address": &self.address,
             "tick": &self.tick,
             "block_height": self.block_height as i64,
-            "amt": self.amt,
+            "amt": Bson::Double(self.amt),
             "entry_type": &self.entry_type.to_string(),
         }
     }

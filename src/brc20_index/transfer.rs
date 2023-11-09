@@ -266,7 +266,7 @@ pub async fn handle_transfer_operation(
 impl ToDocument for Brc20Transfer {
     fn to_document(&self) -> Document {
         doc! {
-            "amt": self.amt,
+            "amt": Bson::Double(self.amt),
             "block_height": self.block_height,
             "tx_height": self.tx_height,
             "tx": self.tx.to_document(), // Convert GetRawTransactionResult to document
@@ -288,7 +288,7 @@ impl ToDocument for Brc20ActiveTransfer {
             "tx_id": &self.tx_id,
             "vout": self.vout,
             "block_height": self.block_height,
-            "amount": self.amount,
+            "amount": Bson::Double(self.amount),
             "created_at": Bson::DateTime(DateTime::now())
         }
     }

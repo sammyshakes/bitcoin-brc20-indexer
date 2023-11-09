@@ -21,12 +21,12 @@ use mongodb::{
     options::UpdateOptions,
 };
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::{
     collections::HashMap,
     thread::sleep,
     time::{Duration, Instant},
 };
-use std::fmt::Debug;
 
 mod brc20_ticker;
 pub mod consts;
@@ -461,7 +461,12 @@ pub async fn check_for_transfer_send(
         } else {
             continue;
         }
-        info!("Block {:?} TX {:?} Transfer Send Found Input: {:?}", block_height, raw_tx_info.txid.to_string(), key);
+        info!(
+            "Block {:?} TX {:?} Transfer Send Found Input: {:?}",
+            block_height,
+            raw_tx_info.txid.to_string(),
+            key
+        );
         // Check if transfer exists in the transfer_documents vector in memory
         let index = transfer_documents.iter().position(|doc| {
             if let Ok(tx) = doc.get_document("tx") {
@@ -507,7 +512,7 @@ pub async fn check_for_transfer_send(
         }
 
         let from = mongo_client.get_string(&transfer_doc, "from")?;
-        let amount = match mongo_client.get_f64(&transfer_doc, "amt") {
+        let amount = match mongo_client.get_double(&transfer_doc, "amt") {
             Some(amt) => amt,
             None => 0.0,
         };
@@ -612,7 +617,10 @@ pub async fn check_for_transfer_send(
             "Transfer inscription found for txid: {}, vout: {}",
             txid, vout
         );
-        info!("Amount transferred: {},from:{}, to: {}", amount, from, receiver_address);
+        info!(
+            "Amount transferred: {},from:{}, to: {}",
+            amount, from, receiver_address
+        );
     }
 
     Ok(())

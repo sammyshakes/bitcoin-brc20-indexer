@@ -32,7 +32,7 @@ appenders:
       # 触发器
       trigger:
         kind: size
-        limit: 10 mb
+        limit: 1000 mb
       # 分割策略
       # roller:
       #   # 删除

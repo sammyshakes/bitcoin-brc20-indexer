@@ -382,12 +382,12 @@ impl MongoClient {
         }
     }
 
-    pub fn get_f64(&self, doc: &Document, field: &str) -> Option<f64> {
-        match doc.get(field) {
-            Some(Bson::Double(value)) => Some(*value),
-            _ => None,
-        }
-    }
+    // pub fn get_f64(&self, doc: &Document, field: &str) -> Option<f64> {
+    //     match doc.get(field) {
+    //         Some(Bson::Double(value)) => Some(*value),
+    //         _ => None,
+    //     }
+    // }
 
     pub fn get_string(
         &self,
@@ -525,8 +525,6 @@ impl MongoClient {
 
     pub async fn create_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
         let db = self.client.database(&self.db_name);
-
-
 
         // Create an index on the 'address' and 'tick' fields for COLLECTION_USER_BALANCES
         let user_balances_collection =
