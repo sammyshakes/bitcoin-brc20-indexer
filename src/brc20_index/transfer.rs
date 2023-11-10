@@ -173,7 +173,14 @@ impl Brc20Transfer {
 
         // Check if the user has enough balance to transfer
         if transfer_amount > 0.0 && available_balance >= transfer_amount {
-            info!("VALID:Tx {:?} Transfer inscription from: {:?}", self.tx.txid.to_string() , self.from);
+            info!(
+                "VALID:Tx {:?} Transfer inscription {:?} {:?} from: {:?}",
+                self.tx.txid.to_string(),
+                ticker_symbol.to_string(),
+                transfer_amount.to_string(),
+                self.from
+            );
+
             self.is_valid = true;
 
             // Insert user balance entry
@@ -191,8 +198,12 @@ impl Brc20Transfer {
             update_sender_or_inscriber_user_balance_document(user_balance, &user_balance_entry)?;
 
             // Create a new active transfer when the inscription is valid
-            let active_transfer =
-                Brc20ActiveTransfer::new(self.tx.txid.to_string(), 0, self.block_height.into(), transfer_amount);
+            let active_transfer = Brc20ActiveTransfer::new(
+                self.tx.txid.to_string(),
+                0,
+                self.block_height.into(),
+                transfer_amount,
+            );
 
             // If active_transfers is None, create a new HashMap and assign it to active_transfers
             if active_transfers.is_none() {
@@ -207,7 +218,7 @@ impl Brc20Transfer {
         } else {
             // If invalid, add invalid tx and return
             let reason = "Transfer amount exceeds available balance";
-            error!("INVALID: {}", reason);
+            error!("INVALID: {} {}", self.tx.txid.to_string(), reason);
 
             self.insert_invalid_tx(reason, invalid_brc20_docs).await?;
         }

@@ -103,10 +103,9 @@ pub async fn index_brc20(
                             for witness in witness_data {
                                 if let Some(inscription) = extract_and_process_witness_data(witness)
                                 {
-                                    // log raw brc20 data
-                                    let pretty_json =
-                                        serde_json::to_string(&inscription).unwrap_or_default();
-                                    info!("Raw Brc-20 data: {}", pretty_json);
+                                    if inscription.amt.clone().unwrap().starts_with("-") {
+                                        continue;
+                                    }
 
                                     // get owner address, inscription is first satoshi of first output
                                     let owner = match get_owner_of_vout(&raw_tx, 0) {
@@ -116,6 +115,15 @@ pub async fn index_brc20(
                                             continue;
                                         }
                                     };
+
+                                    // log raw brc20 data
+                                    let pretty_json =
+                                        serde_json::to_string(&inscription).unwrap_or_default();
+                                    info!(
+                                        "Owner {} Raw Brc-20 data: {}",
+                                        owner.to_string(),
+                                        pretty_json
+                                    );
 
                                     match &inscription.op[..] {
                                         "deploy" => {
@@ -275,32 +283,32 @@ pub async fn index_brc20(
                         if !user_balance_docs_to_update.is_empty()
                             || !user_balance_docs_to_insert.is_empty()
                         {
-                            let start = Instant::now();
-                            let start_len = user_balance_docs_to_update.len();
-                            // This removes all UserBalance with 0 in all the balance fields.
-                            user_balance_docs_to_update.retain(|_, user_balance_doc| {
-                                let overall_balance = user_balance_doc
-                                    .get_f64(consts::OVERALL_BALANCE)
-                                    .unwrap_or_default();
-                                let available_balance = user_balance_doc
-                                    .get_f64(consts::AVAILABLE_BALANCE)
-                                    .unwrap_or_default();
-                                let transferable_balance = user_balance_doc
-                                    .get_f64(consts::TRANSFERABLE_BALANCE)
-                                    .unwrap_or_default();
-
-                                overall_balance != 0.0
-                                    || available_balance != 0.0
-                                    || transferable_balance != 0.0
-                            });
-
-                            let len = user_balance_docs_to_update.len();
-
-                            warn!(
-                                "Zeroed User Balances removed: {} in {:?}",
-                                start_len - len,
-                                start.elapsed()
-                            );
+                            // let start = Instant::now();
+                            // let start_len = user_balance_docs_to_update.len();
+                            // // This removes all UserBalance with 0 in all the balance fields.
+                            // user_balance_docs_to_update.retain(|_, user_balance_doc| {
+                            //     let overall_balance = user_balance_doc
+                            //         .get_f64(consts::OVERALL_BALANCE)
+                            //         .unwrap_or_default();
+                            //     let available_balance = user_balance_doc
+                            //         .get_f64(consts::AVAILABLE_BALANCE)
+                            //         .unwrap_or_default();
+                            //     let transferable_balance = user_balance_doc
+                            //         .get_f64(consts::TRANSFERABLE_BALANCE)
+                            //         .unwrap_or_default();
+                            //
+                            //     overall_balance != 0.0
+                            //         || available_balance != 0.0
+                            //         || transferable_balance != 0.0
+                            // });
+                            //
+                            // let len = user_balance_docs_to_update.len();
+                            //
+                            // warn!(
+                            //     "Zeroed User Balances removed: {} in {:?}",
+                            //     start_len - len,
+                            //     start.elapsed()
+                            // );
 
                             info!("Inserting User Balances...");
                             // write user balance documents to mongodb
@@ -502,6 +510,7 @@ pub async fn check_for_transfer_send(
 
         let mut tick = String::new();
         if let Some(inscription) = transfer_doc.get_document("inscription").ok() {
+            info!("Send inscription {}", inscription.clone());
             if let Some(tck) = inscription.get_str("tick").ok() {
                 tick = tck.to_string();
             } else {
@@ -618,8 +627,11 @@ pub async fn check_for_transfer_send(
             txid, vout
         );
         info!(
-            "Amount transferred: {},from:{}, to: {}",
-            amount, from, receiver_address
+            "Amount transferred:{}, {},from:{}, to: {}",
+            tick,
+            amount.to_string(),
+            from,
+            receiver_address
         );
     }
 

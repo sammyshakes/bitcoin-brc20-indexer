@@ -333,26 +333,22 @@ pub async fn update_sender_user_balance_document(
         update_sender_or_inscriber_user_balance_document(user_balance, user_balance_entry)?;
     } else {
         // Check if the user balance document exists in the 'user_balance_docs_to_insert' hashmap
-        let user_balance = user_balance_docs_to_insert.get_mut(&key);
+        let user_balance1 = user_balance_docs_to_insert.get_mut(&key);
 
-        if let Some(user_balance) = user_balance {
+        if let Some(user_balance) = user_balance1 {
             // Update the existing user balance document
             update_sender_or_inscriber_user_balance_document(user_balance, user_balance_entry)?;
         } else {
             // Load the user balance document with retry
-            let user_balance_doc = mongo_client
+            let mut user_balance_doc = mongo_client
                 .load_user_balance_with_retry(&key)
                 .await
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-            if let Some(user_balance) = user_balance_doc {
+            if let Some(ref mut user_balance) = user_balance_doc {
                 // Update the existing user balance document
-                update_sender_or_inscriber_user_balance_document(
-                    user_balances
-                        .entry(key.clone())
-                        .or_insert_with(|| user_balance.clone()),
-                    user_balance_entry,
-                )?;
+                update_sender_or_inscriber_user_balance_document(user_balance, user_balance_entry)?;
+                user_balances.insert(key, user_balance.to_owned());
             } else {
                 // User balance document not found in any hashmap or database
                 return Err(anyhow::anyhow!("User balance document not found"));
