@@ -240,17 +240,16 @@ fn update_receiver(
     // Get the overall and available balance values from the document
     let overall_balance = user_balance
         .get_f64(consts::OVERALL_BALANCE)
-        .unwrap_or_default()
-        * factor;
+        .unwrap_or_default();
     let available_balance = user_balance
         .get_f64(consts::AVAILABLE_BALANCE)
-        .unwrap_or_default()
-        * factor;
-    let user_entry_amt = user_balance_entry.amt * factor;
+        .unwrap_or_default();
 
     // Update the values
-    let updated_overall_balance = (overall_balance + user_entry_amt) / factor;
-    let updated_available_balance = (available_balance + user_entry_amt) / factor;
+    let updated_overall_balance =
+        (overall_balance * factor + user_balance_entry.amt * factor) / factor;
+    let updated_available_balance =
+        (available_balance * factor + user_balance_entry.amt * factor) / factor;
 
     // Update the document
     user_balance.insert(
@@ -279,23 +278,20 @@ pub fn update_sender_or_inscriber_user_balance_document(
     // Get the available balance, transferable balance, and overall balance values
     let available_balance = user_balance
         .get_f64(consts::AVAILABLE_BALANCE)
-        .unwrap_or_default()
-        * factor;
+        .unwrap_or_default();
     let transferable_balance = user_balance
         .get_f64(consts::TRANSFERABLE_BALANCE)
-        .unwrap_or_default()
-        * factor;
+        .unwrap_or_default();
     let overall_balance = user_balance
         .get_f64(consts::OVERALL_BALANCE)
-        .unwrap_or_default()
-        * factor;
-
-    let user_entry_amt = user_balance_entry.amt * factor;
+        .unwrap_or_default();
 
     match user_balance_entry.entry_type {
         UserBalanceEntryType::Send => {
-            let updated_transferable_balance = (transferable_balance - user_entry_amt) / factor;
-            let updated_overall_balance = (overall_balance - user_entry_amt) / factor;
+            let updated_transferable_balance =
+                (transferable_balance * factor - user_balance_entry.amt * factor) / factor;
+            let updated_overall_balance =
+                (overall_balance * factor - user_balance_entry.amt * factor) / factor;
 
             user_balance.insert(
                 consts::TRANSFERABLE_BALANCE,
@@ -307,8 +303,10 @@ pub fn update_sender_or_inscriber_user_balance_document(
             );
         }
         UserBalanceEntryType::Inscription => {
-            let updated_available_balance = (available_balance - user_entry_amt) / factor;
-            let updated_transferable_balance = (transferable_balance + user_entry_amt) / factor;
+            let updated_available_balance =
+                (available_balance * factor - user_balance_entry.amt * factor) / factor;
+            let updated_transferable_balance =
+                (transferable_balance * factor + user_balance_entry.amt * factor) / factor;
 
             user_balance.insert(
                 consts::AVAILABLE_BALANCE,
@@ -418,7 +416,7 @@ mod tests {
         let a = 4.0f64;
         let b = 0.1f64;
 
-        let i = 10.0_f64.powi(18);
+        let i = 10_f64.powi(18);
 
         let c = (a * i - b * i) / i;
         println!("{}", c);
