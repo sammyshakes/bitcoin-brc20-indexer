@@ -103,10 +103,6 @@ pub async fn index_brc20(
                             for witness in witness_data {
                                 if let Some(inscription) = extract_and_process_witness_data(witness)
                                 {
-                                    if inscription.amt.clone().unwrap().starts_with("-") {
-                                        continue;
-                                    }
-
                                     // get owner address, inscription is first satoshi of first output
                                     let owner = match get_owner_of_vout(&raw_tx, 0) {
                                         Ok(owner) => owner,

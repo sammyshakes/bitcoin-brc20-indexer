@@ -8,7 +8,7 @@ use crate::brc20_index::{
 };
 use bitcoin::Address;
 use bitcoincore_rpc::bitcoincore_rpc_json::GetRawTransactionResult;
-use log::{debug, error, info};
+use log::{error, info};
 use mongodb::bson::{doc, Bson, DateTime, Document};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -111,6 +111,11 @@ impl Brc20Transfer {
             )));
         }
 
+        let decimal = ticker_doc_from_mongo
+            .unwrap()
+            .get_i32("decimals")
+            .unwrap_or_default();
+
         // Get the user balance document from the hashmap
         let user_balance_from =
             user_balances_to_update.get_mut(&(from.clone(), ticker_symbol.clone()));
@@ -154,13 +159,13 @@ impl Brc20Transfer {
             }
         };
 
-        debug!(
+        info!(
             "user_balance from validate_inscribe_transfer: {:?}",
             user_balance
         );
 
-        let available_balance = mongo_client
-            .get_double(&user_balance, consts::AVAILABLE_BALANCE)
+        let available_balance = user_balance
+            .get_f64(consts::AVAILABLE_BALANCE)
             .unwrap_or_default();
 
         // Get transfer amount
@@ -174,11 +179,12 @@ impl Brc20Transfer {
         // Check if the user has enough balance to transfer
         if transfer_amount > 0.0 && available_balance >= transfer_amount {
             info!(
-                "VALID:Tx {:?} Transfer inscription {:?} {:?} from: {:?}",
+                "VALID:Tx {:?} Transfer inscription {:?} {:?} from: {:?} {:?}",
                 self.tx.txid.to_string(),
                 ticker_symbol.to_string(),
                 transfer_amount.to_string(),
-                self.from
+                self.from,
+                available_balance
             );
 
             self.is_valid = true;
@@ -195,7 +201,12 @@ impl Brc20Transfer {
                 .await?;
 
             // Update the user balance document
-            update_sender_or_inscriber_user_balance_document(user_balance, &user_balance_entry)?;
+            update_sender_or_inscriber_user_balance_document(
+                user_balance,
+                &user_balance_entry,
+                decimal,
+            )?;
+            info!("update sender user balance 0 {}", user_balance);
 
             // Create a new active transfer when the inscription is valid
             let active_transfer = Brc20ActiveTransfer::new(
