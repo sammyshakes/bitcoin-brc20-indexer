@@ -113,8 +113,8 @@ impl Brc20Transfer {
 
         let decimal = ticker_doc_from_mongo
             .unwrap()
-            .get_i32("decimals")
-            .unwrap_or_default();
+            .get_i64("decimals")
+            .unwrap_or_default() as i32;
 
         // Get the user balance document from the hashmap
         let user_balance_from =
@@ -160,8 +160,8 @@ impl Brc20Transfer {
         };
 
         info!(
-            "user_balance from validate_inscribe_transfer: {:?}",
-            user_balance
+            "user_balance from validate_inscribe_transfer: {:?} decimals {}",
+            user_balance, decimal
         );
 
         let available_balance = user_balance
