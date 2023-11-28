@@ -7,10 +7,12 @@ use super::{
 };
 use bitcoin::{Address, Network, TxIn};
 use bitcoincore_rpc::{bitcoincore_rpc_json::GetRawTransactionResult, Client, RpcApi};
-use log::{debug, error};
+use log::{debug, error, info};
 use mongodb::bson::{Bson, Document};
+use rust_decimal::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::ops::{Add, Sub};
 
 pub fn get_witness_data_from_raw_tx(
     raw_tx_info: &GetRawTransactionResult,
@@ -168,6 +170,7 @@ pub async fn update_receiver_balance_document(
             user_balance
         );
         update_receiver(user_balance, user_balance_entry)?;
+        info!("update receiver user balance 1 {}", user_balance)
     } else {
         // Check if the user balance document exists in the 'user_balance_docs_to_insert' hashmap
         if let Some(user_balance) = user_balance_docs_to_insert.get_mut(&key) {
@@ -177,6 +180,7 @@ pub async fn update_receiver_balance_document(
                 user_balance
             );
             update_receiver(user_balance, user_balance_entry)?;
+            info!("update receiver user balance 2 {}", user_balance)
         } else {
             // Load the user balance document from MongoDB with retry
             let user_balance_doc = mongo_client
@@ -196,6 +200,7 @@ pub async fn update_receiver_balance_document(
                         .or_insert_with(|| user_balance.clone()),
                     user_balance_entry,
                 )?;
+                info!("update receiver user balance 3 {}", user_balance)
             } else {
                 // Document not found, create a new user balance document
                 let new_user_balance = UserBalance {
@@ -215,7 +220,8 @@ pub async fn update_receiver_balance_document(
                     "Adding new user balance document to insert: {:?}",
                     new_user_balance_doc
                 );
-                user_balance_docs_to_insert.insert(key, new_user_balance_doc);
+                user_balance_docs_to_insert.insert(key, new_user_balance_doc.clone());
+                info!("update receiver user balance 4 {}", new_user_balance_doc)
             }
         }
     }
@@ -236,9 +242,13 @@ fn update_receiver(
         .get_f64(consts::AVAILABLE_BALANCE)
         .unwrap_or_default();
 
+    let ob = Decimal::from_f64(overall_balance).unwrap_or_default();
+    let ab = Decimal::from_f64(available_balance).unwrap_or_default();
+    let ub = Decimal::from_f64(user_balance_entry.amt).unwrap_or_default();
+
     // Update the values
-    let updated_overall_balance = overall_balance + user_balance_entry.amt;
-    let updated_available_balance = available_balance + user_balance_entry.amt;
+    let updated_overall_balance = ob.add(ub).normalize().to_f64().unwrap();
+    let updated_available_balance = ab.add(ub).normalize().to_f64().unwrap();
 
     // Update the document
     user_balance.insert(
@@ -273,30 +283,35 @@ pub fn update_sender_or_inscriber_user_balance_document(
         .get_f64(consts::OVERALL_BALANCE)
         .unwrap_or_default();
 
+    let ob = Decimal::from_f64(overall_balance).unwrap_or_default();
+    let ab = Decimal::from_f64(available_balance).unwrap_or_default();
+    let tb = Decimal::from_f64(transferable_balance).unwrap_or_default();
+    let ub = Decimal::from_f64(user_balance_entry.amt).unwrap_or_default();
+
     match user_balance_entry.entry_type {
         UserBalanceEntryType::Send => {
-            let updated_transferable_balance = transferable_balance - user_balance_entry.amt;
-            let updated_overall_balance = overall_balance - user_balance_entry.amt;
+            let updated_overall_balance = ob.sub(ub).normalize().to_f64().unwrap();
+            let updated_transferable_balance = tb.sub(ub).normalize().to_f64().unwrap();
 
             user_balance.insert(
-                consts::TRANSFERABLE_BALANCE.to_string(),
+                consts::TRANSFERABLE_BALANCE,
                 Bson::Double(updated_transferable_balance),
             );
             user_balance.insert(
-                consts::OVERALL_BALANCE.to_string(),
+                consts::OVERALL_BALANCE,
                 Bson::Double(updated_overall_balance),
             );
         }
         UserBalanceEntryType::Inscription => {
-            let updated_available_balance = available_balance - user_balance_entry.amt;
-            let updated_transferable_balance = transferable_balance + user_balance_entry.amt;
+            let updated_available_balance = ab.sub(ub).normalize().to_f64().unwrap();
+            let updated_transferable_balance = tb.add(ub).normalize().to_f64().unwrap();
 
             user_balance.insert(
-                consts::AVAILABLE_BALANCE.to_string(),
+                consts::AVAILABLE_BALANCE,
                 Bson::Double(updated_available_balance),
             );
             user_balance.insert(
-                consts::TRANSFERABLE_BALANCE.to_string(),
+                consts::TRANSFERABLE_BALANCE,
                 Bson::Double(updated_transferable_balance),
             );
         }
@@ -331,28 +346,27 @@ pub async fn update_sender_user_balance_document(
     if let Some(user_balance) = user_balances.get_mut(&key) {
         // Update the existing user balance document
         update_sender_or_inscriber_user_balance_document(user_balance, user_balance_entry)?;
+        info!("update sender user balance 1 {}", user_balance)
     } else {
         // Check if the user balance document exists in the 'user_balance_docs_to_insert' hashmap
-        let user_balance = user_balance_docs_to_insert.get_mut(&key);
+        let user_balance1 = user_balance_docs_to_insert.get_mut(&key);
 
-        if let Some(user_balance) = user_balance {
+        if let Some(user_balance) = user_balance1 {
             // Update the existing user balance document
             update_sender_or_inscriber_user_balance_document(user_balance, user_balance_entry)?;
+            info!("update sender user balance 2 {}", user_balance)
         } else {
             // Load the user balance document with retry
-            let user_balance_doc = mongo_client
+            let mut user_balance_doc = mongo_client
                 .load_user_balance_with_retry(&key)
                 .await
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-            if let Some(user_balance) = user_balance_doc {
+            if let Some(ref mut user_balance) = user_balance_doc {
                 // Update the existing user balance document
-                update_sender_or_inscriber_user_balance_document(
-                    user_balances
-                        .entry(key.clone())
-                        .or_insert_with(|| user_balance.clone()),
-                    user_balance_entry,
-                )?;
+                update_sender_or_inscriber_user_balance_document(user_balance, user_balance_entry)?;
+                user_balances.insert(key, user_balance.to_owned());
+                info!("update sender user balance 3 {}", user_balance)
             } else {
                 // User balance document not found in any hashmap or database
                 return Err(anyhow::anyhow!("User balance document not found"));
@@ -380,6 +394,39 @@ struct TickerWithBalances {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_f64_number() {
+        let a = 4.0f64;
+        let b = 0.000000000000000001f64;
+
+        let aa = Decimal::from_f64(a).unwrap_or_default();
+        let bb = Decimal::from_f64(b).unwrap_or_default();
+        println!("{}, {}", b, bb);
+
+        let i = 10_f64.powi(18);
+
+        let c = (a * i - b * i).round() / i;
+        let cc = Some(aa.sub(bb).normalize().to_string());
+        let ccc = bb.to_f64().unwrap();
+
+        println!("{},{}, {}", c, cc.unwrap(), ccc.to_string());
+
+        // let d = (c * i - b * i) / i;
+        // let ccc = Decimal::from_f64(cc).unwrap_or_default();
+        // let dd = ccc.sub(bb).normalize().to_f64().unwrap();
+        // println!("{}, {}", d, dd);
+        //
+        // let e = (d * i - b * i) / i;
+        // let ddd = Decimal::from_f64(dd).unwrap_or_default();
+        // let ee = ddd.sub(bb).normalize().to_f64().unwrap();
+        // println!("{}, {}", e, ee);
+        //
+        // let f = (e * i - b * i) / i;
+        // let eee = Decimal::from_f64(ee).unwrap_or_default();
+        // let ff = eee.sub(bb).normalize().to_f64().unwrap();
+        // println!("{}, {}", f, ff);
+    }
 
     #[test]
     fn test_convert_to_float_no_decimal() {

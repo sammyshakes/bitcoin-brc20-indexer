@@ -382,12 +382,12 @@ impl MongoClient {
         }
     }
 
-    pub fn get_f64(&self, doc: &Document, field: &str) -> Option<f64> {
-        match doc.get(field) {
-            Some(Bson::Double(value)) => Some(*value),
-            _ => None,
-        }
-    }
+    // pub fn get_f64(&self, doc: &Document, field: &str) -> Option<f64> {
+    //     match doc.get(field) {
+    //         Some(Bson::Double(value)) => Some(*value),
+    //         _ => None,
+    //     }
+    // }
 
     pub fn get_string(
         &self,
@@ -539,16 +539,22 @@ impl MongoClient {
             .create_index(user_balances_index_model, None)
             .await?;
 
+        info!("build 1");
+
         // Create an index on the 'block_height' field for COLLECTION_USER_BALANCES
         let block_height_index_model = IndexModel::builder()
             .keys(doc! { "block_height": 1 }) // 1 for ascending
             .options(IndexOptions::default())
             .build();
 
+        info!("build 1");
+
         // Create the index for COLLECTION_USER_BALANCES
         user_balances_collection
             .create_index(block_height_index_model, None)
             .await?;
+
+        info!("build 2");
 
         // Create an index on the 'tick' field for COLLECTION_TICKERS
         let tickers_collection = db.collection::<bson::Document>(consts::COLLECTION_TICKERS);
@@ -562,6 +568,8 @@ impl MongoClient {
             .create_index(tickers_index_model, None)
             .await?;
 
+        info!("build 3");
+
         // Create an index on the 'tx.txid' field for COLLECTION_TRANSFERS
         let transfers_collection = db.collection::<bson::Document>(consts::COLLECTION_TRANSFERS);
         let txid_index_model = IndexModel::builder()
@@ -574,6 +582,8 @@ impl MongoClient {
             .create_index(txid_index_model, None)
             .await?;
 
+        info!("build 4");
+
         // Create an index on the 'inscription.tick' field for COLLECTION_MINTS
         let mints_collection = db.collection::<bson::Document>(consts::COLLECTION_MINTS);
         let mints_index_model = IndexModel::builder()
@@ -585,6 +595,7 @@ impl MongoClient {
         mints_collection
             .create_index(mints_index_model, None)
             .await?;
+        info!("build 5");
 
         Ok(())
     }

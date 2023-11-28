@@ -192,7 +192,7 @@ impl Brc20Deploy {
         match &self.inscription.lim {
             Some(lim_str) => match convert_to_float(lim_str, self.dec) {
                 Ok(limit) => {
-                    if limit <= max && decimal_places(limit) <= self.dec.into() {
+                    if limit > 0.0 && limit <= max && decimal_places(limit) <= self.dec.into() {
                         Ok(limit)
                     } else {
                         Err("Limit must be less than or equal to max supply and the number of decimal places must not exceed the decimal value.".to_string())

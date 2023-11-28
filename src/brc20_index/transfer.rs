@@ -8,7 +8,7 @@ use crate::brc20_index::{
 };
 use bitcoin::Address;
 use bitcoincore_rpc::bitcoincore_rpc_json::GetRawTransactionResult;
-use log::{debug, error, info};
+use log::{error, info};
 use mongodb::bson::{doc, Bson, DateTime, Document};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -19,14 +19,16 @@ pub struct Brc20ActiveTransfer {
     pub tx_id: String,
     pub vout: i64,
     pub block_height: i64,
+    pub amount: f64,
 }
 
 impl Brc20ActiveTransfer {
-    pub fn new(tx_id: String, vout: i64, block_height: i64) -> Self {
+    pub fn new(tx_id: String, vout: i64, block_height: i64, amount: f64) -> Self {
         Brc20ActiveTransfer {
             tx_id,
             vout,
             block_height,
+            amount,
         }
     }
 }
@@ -109,6 +111,11 @@ impl Brc20Transfer {
             )));
         }
 
+        let decimal = ticker_doc_from_mongo
+            .unwrap()
+            .get_i64("decimals")
+            .unwrap_or_default() as i32;
+
         // Get the user balance document from the hashmap
         let user_balance_from =
             user_balances_to_update.get_mut(&(from.clone(), ticker_symbol.clone()));
@@ -152,13 +159,13 @@ impl Brc20Transfer {
             }
         };
 
-        debug!(
+        info!(
             "user_balance from validate_inscribe_transfer: {:?}",
             user_balance
         );
 
-        let available_balance = mongo_client
-            .get_double(&user_balance, "available_balance")
+        let available_balance = user_balance
+            .get_f64(consts::AVAILABLE_BALANCE)
             .unwrap_or_default();
 
         // Get transfer amount
@@ -170,8 +177,18 @@ impl Brc20Transfer {
             .unwrap_or(0.0);
 
         // Check if the user has enough balance to transfer
-        if available_balance >= transfer_amount {
-            info!("VALID: Transfer inscription from: {:?}", self.from);
+        if transfer_amount * (10_f64.powi(decimal)) >= 1.0f64
+            && available_balance >= transfer_amount
+        {
+            info!(
+                "VALID:Tx {:?} Transfer inscription {:?} {:?} from: {:?} {:?}",
+                self.tx.txid.to_string(),
+                ticker_symbol.to_string(),
+                transfer_amount.to_string(),
+                self.from,
+                available_balance
+            );
+
             self.is_valid = true;
 
             // Insert user balance entry
@@ -187,10 +204,15 @@ impl Brc20Transfer {
 
             // Update the user balance document
             update_sender_or_inscriber_user_balance_document(user_balance, &user_balance_entry)?;
+            info!("update sender user balance 0 {}", user_balance);
 
             // Create a new active transfer when the inscription is valid
-            let active_transfer =
-                Brc20ActiveTransfer::new(self.tx.txid.to_string(), 0, self.block_height.into());
+            let active_transfer = Brc20ActiveTransfer::new(
+                self.tx.txid.to_string(),
+                0,
+                self.block_height.into(),
+                transfer_amount,
+            );
 
             // If active_transfers is None, create a new HashMap and assign it to active_transfers
             if active_transfers.is_none() {
@@ -205,7 +227,7 @@ impl Brc20Transfer {
         } else {
             // If invalid, add invalid tx and return
             let reason = "Transfer amount exceeds available balance";
-            error!("INVALID: {}", reason);
+            error!("INVALID: {} {}", self.tx.txid.to_string(), reason);
 
             self.insert_invalid_tx(reason, invalid_brc20_docs).await?;
         }
@@ -264,7 +286,7 @@ pub async fn handle_transfer_operation(
 impl ToDocument for Brc20Transfer {
     fn to_document(&self) -> Document {
         doc! {
-            "amt": self.amt,
+            "amt": Bson::Double(self.amt),
             "block_height": self.block_height,
             "tx_height": self.tx_height,
             "tx": self.tx.to_document(), // Convert GetRawTransactionResult to document
@@ -283,9 +305,10 @@ impl ToDocument for Brc20Transfer {
 impl ToDocument for Brc20ActiveTransfer {
     fn to_document(&self) -> Document {
         doc! {
-            "txid": self.tx_id.to_string(),
+            "tx_id": &self.tx_id,
             "vout": self.vout,
             "block_height": self.block_height,
+            "amount": Bson::Double(self.amount),
             "created_at": Bson::DateTime(DateTime::now())
         }
     }
@@ -306,10 +329,15 @@ impl Brc20ActiveTransfer {
             .get_i64("block_height")
             .map_err(|_| "Invalid block_height".to_string())?;
 
+        let amount = document
+            .get_f64("amount")
+            .map_err(|_| "Invalid amount".to_string())?;
+
         Ok(Self {
             tx_id,
             vout,
             block_height,
+            amount,
         })
     }
 }

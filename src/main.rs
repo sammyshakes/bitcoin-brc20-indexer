@@ -7,7 +7,7 @@ use consulrs::{
     kv,
 };
 use dotenv::dotenv;
-use log::{error, info, warn};
+use log::{info, warn, error};
 use serde_json;
 use serde_json::Value;
 use std::env;
@@ -18,7 +18,7 @@ mod brc20_index;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
-    env_logger::init();
+    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 
     // Variables for configuration
     let rpc_url: String;
@@ -111,9 +111,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mongo_db_host = env::var("MONGO_DB_HOST").unwrap();
 
         mongo_connection_str = if let (Some(user), Some(password)) = (mongo_user, mongo_password) {
-            format!("mongodb://{}:{}@{}:27017", user, password, mongo_db_host)
+            format!("mongodb://{}:{}@{}:27017/ominisat?authMechanism=SCRAM-SHA-1", user, password, mongo_db_host)
         } else {
-            format!("mongodb://{}:27017", mongo_db_host)
+            format!("mongodb://{}:27017/ominisat?authMechanism=SCRAM-SHA-1", mongo_db_host)
         };
     }
 
@@ -125,9 +125,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_name = env::var("MONGO_DB_NAME").unwrap();
     let mongo_client =
         MongoClient::new(&mongo_connection_str, &db_name, mongo_direct_connection).await?;
+    info!("Connected to MongoDB");
 
     // Call create_indexes after MongoClient has been initialized
     mongo_client.create_indexes().await?;
+    info!("MongoDB create indexes");
+
 
     let start = Instant::now();
     // get block height to start indexing from

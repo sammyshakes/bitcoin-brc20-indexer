@@ -21,6 +21,7 @@ use mongodb::{
     options::UpdateOptions,
 };
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::{
     collections::HashMap,
     thread::sleep,
@@ -55,21 +56,20 @@ pub async fn index_brc20(
                             current_block_hash, length, current_block_height
                         );
 
+                        // Vectors for mongo bulk writes
+                        let mut invalid_brc20_documents = Vec::new();
+                        let mut deploy_documents = Vec::new();
+                        let mut tickers: HashMap<String, Document> = HashMap::new();
+                        let mut mint_documents = Vec::new();
+                        let mut transfer_documents = Vec::new();
+
                         let mut active_transfers_opt =
                             mongo_client.load_active_transfers_with_retry().await?;
-
-                        // If active_transfers_opt is None, initialize it with a new HashMap
                         if active_transfers_opt.is_none() {
                             active_transfers_opt = Some(HashMap::new());
                         }
 
-                        // Vectors for mongo bulk writes
-                        let mut mint_documents = Vec::new();
-                        let mut transfer_documents = Vec::new();
-                        let mut deploy_documents = Vec::new();
-                        let mut invalid_brc20_documents = Vec::new();
                         let mut user_balance_entry_documents = Vec::new();
-                        let mut tickers: HashMap<String, Document> = HashMap::new();
                         let mut user_balance_docs_to_update: HashMap<(String, String), Document> =
                             HashMap::new();
                         let mut user_balance_docs_to_insert: HashMap<(String, String), Document> =
@@ -103,11 +103,6 @@ pub async fn index_brc20(
                             for witness in witness_data {
                                 if let Some(inscription) = extract_and_process_witness_data(witness)
                                 {
-                                    // log raw brc20 data
-                                    let pretty_json =
-                                        serde_json::to_string(&inscription).unwrap_or_default();
-                                    info!("Raw Brc-20 data: {}", pretty_json);
-
                                     // get owner address, inscription is first satoshi of first output
                                     let owner = match get_owner_of_vout(&raw_tx, 0) {
                                         Ok(owner) => owner,
@@ -116,6 +111,15 @@ pub async fn index_brc20(
                                             continue;
                                         }
                                     };
+
+                                    // log raw brc20 data
+                                    let pretty_json =
+                                        serde_json::to_string(&inscription).unwrap_or_default();
+                                    info!(
+                                        "Owner {} Raw Brc-20 data: {}",
+                                        owner.to_string(),
+                                        pretty_json
+                                    );
 
                                     match &inscription.op[..] {
                                         "deploy" => {
@@ -275,32 +279,32 @@ pub async fn index_brc20(
                         if !user_balance_docs_to_update.is_empty()
                             || !user_balance_docs_to_insert.is_empty()
                         {
-                            let start = Instant::now();
-                            let start_len = user_balance_docs_to_update.len();
-                            // This removes all UserBalance with 0 in all the balance fields.
-                            user_balance_docs_to_update.retain(|_, user_balance_doc| {
-                                let overall_balance = user_balance_doc
-                                    .get_f64("overall_balance")
-                                    .unwrap_or_default();
-                                let available_balance = user_balance_doc
-                                    .get_f64("available_balance")
-                                    .unwrap_or_default();
-                                let transferable_balance = user_balance_doc
-                                    .get_f64("transferable_balance")
-                                    .unwrap_or_default();
-
-                                overall_balance != 0.0
-                                    || available_balance != 0.0
-                                    || transferable_balance != 0.0
-                            });
-
-                            let len = user_balance_docs_to_update.len();
-
-                            warn!(
-                                "Zeroed User Balances removed: {} in {:?}",
-                                start_len - len,
-                                start.elapsed()
-                            );
+                            // let start = Instant::now();
+                            // let start_len = user_balance_docs_to_update.len();
+                            // // This removes all UserBalance with 0 in all the balance fields.
+                            // user_balance_docs_to_update.retain(|_, user_balance_doc| {
+                            //     let overall_balance = user_balance_doc
+                            //         .get_f64(consts::OVERALL_BALANCE)
+                            //         .unwrap_or_default();
+                            //     let available_balance = user_balance_doc
+                            //         .get_f64(consts::AVAILABLE_BALANCE)
+                            //         .unwrap_or_default();
+                            //     let transferable_balance = user_balance_doc
+                            //         .get_f64(consts::TRANSFERABLE_BALANCE)
+                            //         .unwrap_or_default();
+                            //
+                            //     overall_balance != 0.0
+                            //         || available_balance != 0.0
+                            //         || transferable_balance != 0.0
+                            // });
+                            //
+                            // let len = user_balance_docs_to_update.len();
+                            //
+                            // warn!(
+                            //     "Zeroed User Balances removed: {} in {:?}",
+                            //     start_len - len,
+                            //     start.elapsed()
+                            // );
 
                             info!("Inserting User Balances...");
                             // write user balance documents to mongodb
@@ -461,12 +465,17 @@ pub async fn check_for_transfer_send(
         } else {
             continue;
         }
-        info!("Transfer Send Found: {:?}", key);
+        info!(
+            "Block {:?} TX {:?} Transfer Send Found Input: {:?}",
+            block_height,
+            raw_tx_info.txid.to_string(),
+            key
+        );
         // Check if transfer exists in the transfer_documents vector in memory
         let index = transfer_documents.iter().position(|doc| {
             if let Ok(tx) = doc.get_document("tx") {
-                if let Ok(txid) = tx.get_str("txid") {
-                    return txid == txid;
+                if let Ok(txid2) = tx.get_str("txid") {
+                    return txid2 == txid;
                 }
             }
             false
@@ -474,6 +483,7 @@ pub async fn check_for_transfer_send(
 
         let transfer_doc = if let Some(index) = index {
             // Document found in the vector, remove it from the vector
+            info!("Checking in document: {:?}", key);
             transfer_documents.remove(index)
         } else {
             info!("Checking in MongoDB: {:?}", key);
@@ -496,6 +506,7 @@ pub async fn check_for_transfer_send(
 
         let mut tick = String::new();
         if let Some(inscription) = transfer_doc.get_document("inscription").ok() {
+            info!("Send inscription {}", inscription.clone());
             if let Some(tck) = inscription.get_str("tick").ok() {
                 tick = tck.to_string();
             } else {
@@ -506,7 +517,7 @@ pub async fn check_for_transfer_send(
         }
 
         let from = mongo_client.get_string(&transfer_doc, "from")?;
-        let amount = match mongo_client.get_f64(&transfer_doc, "amt") {
+        let amount = match mongo_client.get_double(&transfer_doc, "amt") {
             Some(amt) => amt,
             None => 0.0,
         };
@@ -611,7 +622,13 @@ pub async fn check_for_transfer_send(
             "Transfer inscription found for txid: {}, vout: {}",
             txid, vout
         );
-        info!("Amount transferred: {}, to: {}", amount, receiver_address);
+        info!(
+            "Amount transferred:{}, {},from:{}, to: {}",
+            tick,
+            amount.to_string(),
+            from,
+            receiver_address
+        );
     }
 
     Ok(())

@@ -10,8 +10,8 @@ pub const COLLECTION_BRC20_ACTIVE_TRANSFERS: &str = "brc20_active_transfers";
 pub const COLLECTION_TOTAL_MINTED_AT_BLOCK_HEIGHT: &str = "total_minted_at_block_height";
 pub const MONGO_RETRIES: u32 = 10000000;
 
-pub const BRC20_STARTING_BLOCK_HEIGHT: i64 = 779832;
-
+// testnet 2423500 mainnet 767430
+pub const BRC20_STARTING_BLOCK_HEIGHT: i64 = 2423500;
 pub const KEY_BLOCK_HEIGHT: &str = "block_height";
 pub const OVERALL_BALANCE: &str = "overall_balance";
 pub const TRANSFERABLE_BALANCE: &str = "transferable_balance";

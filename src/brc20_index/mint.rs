@@ -26,7 +26,7 @@ pub struct Brc20Mint {
 impl ToDocument for Brc20Mint {
     fn to_document(&self) -> Document {
         doc! {
-            "amt": self.amt,
+            "amt": Bson::Double(self.amt),
             "block_height": self.block_height,
             "tx_height": self.tx_height,
             "to": self.to.to_string(),
@@ -75,20 +75,16 @@ impl Brc20Mint {
         if let Some(ticker_doc) = ticker_doc_opt {
             // get values from ticker doc
             let limit = ticker_doc
-                .get("limit")
-                .and_then(Bson::as_f64)
+                .get_f64("limit")
                 .unwrap_or_default();
             let max_supply = ticker_doc
-                .get("max_supply")
-                .and_then(Bson::as_f64)
+                .get_f64("max_supply")
                 .unwrap_or_default();
             let total_minted = ticker_doc
-                .get("total_minted")
-                .and_then(Bson::as_f64)
+                .get_f64("total_minted")
                 .unwrap_or_default();
             let decimals = ticker_doc
-                .get("decimals")
-                .and_then(Bson::as_i32)
+                .get_i32("decimals")
                 .unwrap_or_default();
 
             // get amount from inscription
@@ -100,8 +96,10 @@ impl Brc20Mint {
             // validate mint amount against ticker limit and max supply
             match amount {
                 Ok(amount) => {
+                    if amount <= 0.0 {
+                        reason = "Mint amount less equal than zero".to_string();
                     // Check if the amount is greater than the limit
-                    if amount > limit {
+                    } else if amount > limit {
                         reason = "Mint amount exceeds limit".to_string();
                     // Check if total minted is already greater than or equal to max supply
                     } else if total_minted >= max_supply {
