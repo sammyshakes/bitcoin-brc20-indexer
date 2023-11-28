@@ -9,8 +9,10 @@ use bitcoin::{Address, Network, TxIn};
 use bitcoincore_rpc::{bitcoincore_rpc_json::GetRawTransactionResult, Client, RpcApi};
 use log::{debug, error, info};
 use mongodb::bson::{Bson, Document};
+use rust_decimal::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::ops::{Add, Sub};
 
 pub fn get_witness_data_from_raw_tx(
     raw_tx_info: &GetRawTransactionResult,
@@ -160,8 +162,6 @@ pub async fn update_receiver_balance_document(
         user_balance_entry.tick.clone(),
     );
 
-    let dec: i32 = 18;
-
     // Check if the user balance document exists in the 'user_balance_docs_to_update' hashmap
     if let Some(user_balance) = user_balance_docs_to_update.get_mut(&key) {
         // Document found in 'user_balance_docs', update it
@@ -169,7 +169,7 @@ pub async fn update_receiver_balance_document(
             "Updating existing user balance document: {:?}",
             user_balance
         );
-        update_receiver(user_balance, user_balance_entry, dec)?;
+        update_receiver(user_balance, user_balance_entry)?;
         info!("update receiver user balance 1 {}", user_balance)
     } else {
         // Check if the user balance document exists in the 'user_balance_docs_to_insert' hashmap
@@ -179,7 +179,7 @@ pub async fn update_receiver_balance_document(
                 "Updating existing user balance document (to insert): {:?}",
                 user_balance
             );
-            update_receiver(user_balance, user_balance_entry, dec)?;
+            update_receiver(user_balance, user_balance_entry)?;
             info!("update receiver user balance 2 {}", user_balance)
         } else {
             // Load the user balance document from MongoDB with retry
@@ -199,7 +199,6 @@ pub async fn update_receiver_balance_document(
                         .entry(key.clone())
                         .or_insert_with(|| user_balance.clone()),
                     user_balance_entry,
-                    dec,
                 )?;
                 info!("update receiver user balance 3 {}", user_balance)
             } else {
@@ -234,9 +233,7 @@ pub async fn update_receiver_balance_document(
 fn update_receiver(
     user_balance: &mut Document,
     user_balance_entry: &UserBalanceEntry,
-    decimal: i32,
 ) -> Result<(), anyhow::Error> {
-    let factor = 10_f64.powi(decimal);
     // Get the overall and available balance values from the document
     let overall_balance = user_balance
         .get_f64(consts::OVERALL_BALANCE)
@@ -245,11 +242,13 @@ fn update_receiver(
         .get_f64(consts::AVAILABLE_BALANCE)
         .unwrap_or_default();
 
+    let ob = Decimal::from_f64(overall_balance).unwrap_or_default();
+    let ab = Decimal::from_f64(available_balance).unwrap_or_default();
+    let ub = Decimal::from_f64(user_balance_entry.amt).unwrap_or_default();
+
     // Update the values
-    let updated_overall_balance =
-        (overall_balance * factor + user_balance_entry.amt * factor) / factor;
-    let updated_available_balance =
-        (available_balance * factor + user_balance_entry.amt * factor) / factor;
+    let updated_overall_balance = ob.add(ub).normalize().to_f64().unwrap();
+    let updated_available_balance = ab.add(ub).normalize().to_f64().unwrap();
 
     // Update the document
     user_balance.insert(
@@ -272,9 +271,7 @@ fn update_receiver(
 pub fn update_sender_or_inscriber_user_balance_document(
     user_balance: &mut Document,
     user_balance_entry: &UserBalanceEntry,
-    decimal: i32,
 ) -> Result<(), anyhow::Error> {
-    let factor = 10_f64.powi(decimal);
     // Get the available balance, transferable balance, and overall balance values
     let available_balance = user_balance
         .get_f64(consts::AVAILABLE_BALANCE)
@@ -286,12 +283,15 @@ pub fn update_sender_or_inscriber_user_balance_document(
         .get_f64(consts::OVERALL_BALANCE)
         .unwrap_or_default();
 
+    let ob = Decimal::from_f64(overall_balance).unwrap_or_default();
+    let ab = Decimal::from_f64(available_balance).unwrap_or_default();
+    let tb = Decimal::from_f64(transferable_balance).unwrap_or_default();
+    let ub = Decimal::from_f64(user_balance_entry.amt).unwrap_or_default();
+
     match user_balance_entry.entry_type {
         UserBalanceEntryType::Send => {
-            let updated_transferable_balance =
-                (transferable_balance * factor - user_balance_entry.amt * factor) / factor;
-            let updated_overall_balance =
-                (overall_balance * factor - user_balance_entry.amt * factor) / factor;
+            let updated_overall_balance = ob.sub(ub).normalize().to_f64().unwrap();
+            let updated_transferable_balance = tb.sub(ub).normalize().to_f64().unwrap();
 
             user_balance.insert(
                 consts::TRANSFERABLE_BALANCE,
@@ -303,10 +303,8 @@ pub fn update_sender_or_inscriber_user_balance_document(
             );
         }
         UserBalanceEntryType::Inscription => {
-            let updated_available_balance =
-                (available_balance * factor - user_balance_entry.amt * factor) / factor;
-            let updated_transferable_balance =
-                (transferable_balance * factor + user_balance_entry.amt * factor) / factor;
+            let updated_available_balance = ab.sub(ub).normalize().to_f64().unwrap();
+            let updated_transferable_balance = tb.add(ub).normalize().to_f64().unwrap();
 
             user_balance.insert(
                 consts::AVAILABLE_BALANCE,
@@ -344,16 +342,10 @@ pub async fn update_sender_user_balance_document(
         user_balance_entry.tick.clone(),
     );
 
-    let decimal: i32 = 18;
-
     // Check if the user balance document exists in the in-memory hashmap
     if let Some(user_balance) = user_balances.get_mut(&key) {
         // Update the existing user balance document
-        update_sender_or_inscriber_user_balance_document(
-            user_balance,
-            user_balance_entry,
-            decimal,
-        )?;
+        update_sender_or_inscriber_user_balance_document(user_balance, user_balance_entry)?;
         info!("update sender user balance 1 {}", user_balance)
     } else {
         // Check if the user balance document exists in the 'user_balance_docs_to_insert' hashmap
@@ -361,11 +353,7 @@ pub async fn update_sender_user_balance_document(
 
         if let Some(user_balance) = user_balance1 {
             // Update the existing user balance document
-            update_sender_or_inscriber_user_balance_document(
-                user_balance,
-                user_balance_entry,
-                decimal,
-            )?;
+            update_sender_or_inscriber_user_balance_document(user_balance, user_balance_entry)?;
             info!("update sender user balance 2 {}", user_balance)
         } else {
             // Load the user balance document with retry
@@ -376,11 +364,7 @@ pub async fn update_sender_user_balance_document(
 
             if let Some(ref mut user_balance) = user_balance_doc {
                 // Update the existing user balance document
-                update_sender_or_inscriber_user_balance_document(
-                    user_balance,
-                    user_balance_entry,
-                    decimal,
-                )?;
+                update_sender_or_inscriber_user_balance_document(user_balance, user_balance_entry)?;
                 user_balances.insert(key, user_balance.to_owned());
                 info!("update sender user balance 3 {}", user_balance)
             } else {
@@ -414,21 +398,34 @@ mod tests {
     #[test]
     fn test_f64_number() {
         let a = 4.0f64;
-        let b = 0.1f64;
+        let b = 0.000000000000000001f64;
+
+        let aa = Decimal::from_f64(a).unwrap_or_default();
+        let bb = Decimal::from_f64(b).unwrap_or_default();
+        println!("{}, {}", b, bb);
 
         let i = 10_f64.powi(18);
 
-        let c = (a * i - b * i) / i;
-        println!("{}", c);
+        let c = (a * i - b * i).round() / i;
+        let cc = Some(aa.sub(bb).normalize().to_string());
+        let ccc = bb.to_f64().unwrap();
 
-        let d = (c * i - b * i) / i;
-        println!("{}", d);
+        println!("{},{}, {}", c, cc.unwrap(), ccc.to_string());
 
-        let e = (d * i - b * i) / i;
-        println!("{}", e);
-
-        let f = (e * i - b * i) / i;
-        println!("{}", f);
+        // let d = (c * i - b * i) / i;
+        // let ccc = Decimal::from_f64(cc).unwrap_or_default();
+        // let dd = ccc.sub(bb).normalize().to_f64().unwrap();
+        // println!("{}, {}", d, dd);
+        //
+        // let e = (d * i - b * i) / i;
+        // let ddd = Decimal::from_f64(dd).unwrap_or_default();
+        // let ee = ddd.sub(bb).normalize().to_f64().unwrap();
+        // println!("{}, {}", e, ee);
+        //
+        // let f = (e * i - b * i) / i;
+        // let eee = Decimal::from_f64(ee).unwrap_or_default();
+        // let ff = eee.sub(bb).normalize().to_f64().unwrap();
+        // println!("{}, {}", f, ff);
     }
 
     #[test]

@@ -160,8 +160,8 @@ impl Brc20Transfer {
         };
 
         info!(
-            "user_balance from validate_inscribe_transfer: {:?} decimals {}",
-            user_balance, decimal
+            "user_balance from validate_inscribe_transfer: {:?}",
+            user_balance
         );
 
         let available_balance = user_balance
@@ -177,7 +177,9 @@ impl Brc20Transfer {
             .unwrap_or(0.0);
 
         // Check if the user has enough balance to transfer
-        if transfer_amount > 0.0 && available_balance >= transfer_amount {
+        if transfer_amount * (10_f64.powi(decimal)) >= 1.0f64
+            && available_balance >= transfer_amount
+        {
             info!(
                 "VALID:Tx {:?} Transfer inscription {:?} {:?} from: {:?} {:?}",
                 self.tx.txid.to_string(),
@@ -201,11 +203,7 @@ impl Brc20Transfer {
                 .await?;
 
             // Update the user balance document
-            update_sender_or_inscriber_user_balance_document(
-                user_balance,
-                &user_balance_entry,
-                decimal,
-            )?;
+            update_sender_or_inscriber_user_balance_document(user_balance, &user_balance_entry)?;
             info!("update sender user balance 0 {}", user_balance);
 
             // Create a new active transfer when the inscription is valid
